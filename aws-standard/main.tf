@@ -168,6 +168,10 @@ variable "proxy_url" {
   default     = ""
 }
 
+variable "internet_access" {
+  default = false
+}
+
 # A random identifier to use as a suffix on resource names to prevent
 # collisions when multiple instances of TFE are installed in a single AWS
 # account.
@@ -241,8 +245,11 @@ module "instance" {
   vpc_id                     = "${data.aws_subnet.instance.vpc_id}"
   cert_id                    = "${var.cert_id}"
   instance_subnet_id         = "${var.instance_subnet_id}"
+  external_security_group_id = "${var.external_security_group_id}"
+  internal_security_group_id = "${var.internal_security_group_id}"
   elb_subnet_id              = "${var.elb_subnet_id}"
   key_name                   = "${var.key_name}"
+  internet_access            = "${var.internet_access}"
   db_username                = "${var.local_db ? "atlasuser" : var.db_username}"
   db_password                = "${var.local_db ? "databasepassword" : var.db_password}"
   db_endpoint                = "${var.local_db ? "127.0.0.1:5432" : module.db.endpoint}"
@@ -258,8 +265,6 @@ module "instance" {
   internal_elb               = "${var.internal_elb}"
   ebs_redundancy             = "${(var.local_redis || var.local_db) ? var.ebs_redundancy : 0}"
   startup_script             = "${var.startup_script}"
-  external_security_group_id = "${var.external_security_group_id}"
-  internal_security_group_id = "${var.internal_security_group_id}"
   proxy_url                  = "${var.proxy_url}"
   local_setup                = "${var.local_setup}"
 }
@@ -312,4 +317,12 @@ output "zone_id" {
 
 output "iam_role" {
   value = "${module.instance.iam_role}"
+}
+
+output "external_security_group_id" {
+  value = "${module.instance.external_security_group}"
+}
+
+output "instance_security_group_id" {
+  value = "${module.instance.instance_security_group}"
 }

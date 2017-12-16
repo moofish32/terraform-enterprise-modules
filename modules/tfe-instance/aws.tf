@@ -74,82 +74,72 @@ variable "proxy_url" {
   default = ""
 }
 
+variable "internet_access" {
+  default = false
+}
+
 resource "aws_security_group" "ptfe" {
   vpc_id = "${var.vpc_id}"
-  count  = "${var.internal_security_group_id != "" ? 0 : 1}"
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # TCP All outbound traffic
-  egress {
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # UDP All outbound traffic
-  egress {
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags {
     Name = "terraform-enterprise"
   }
 }
 
-resource "aws_security_group" "ptfe-external" {
-  count  = "${var.external_security_group_id != "" ? 0 : 1}"
+// allow elb to talk to the instance
+resource "aws_security_group_rule" "allow_elb_ingress" {
+  type                     = "ingress"
+  from_port                = 8080
+  to_port                  = 8080
+  protocol                 = "tcp"
+  source_security_group_id = "${aws_security_group.ptfe_external.id}"
+  security_group_id        = "${aws_security_group.ptfe.id}"
+}
+
+resource "aws_security_group" "ptfe_external" {
   vpc_id = "${var.vpc_id}"
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # TCP All outbound traffic
-  egress {
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # UDP All outbound traffic
-  egress {
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "udp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags {
     Name = "terraform-enterprise-external"
   }
+}
+
+resource "aws_security_group_rule" "allow_internet_80" {
+  count = "${var.internet_access ? 1 : 0 }"
+  type            = "ingress"
+  from_port       = 80
+  to_port         = 80
+  protocol        = "tcp"
+  cidr_blocks     = ["0.0.0.0/0"]
+  security_group_id = "${aws_security_group.ptfe_external.id}"
+}
+
+resource "aws_security_group_rule" "allow_internet_443" {
+  count = "${var.internet_access ? 1 : 0 }"
+  type            = "ingress"
+  from_port       = 443
+  to_port         = 443
+  protocol        = "tcp"
+  cidr_blocks     = ["0.0.0.0/0"]
+  security_group_id = "${aws_security_group.ptfe_external.id}"
+}
+
+resource "aws_security_group_rule" "allow_tcp_egress" {
+  count = 2
+  type            = "egress"
+  from_port       = 0
+  to_port         = 65535
+  protocol        = "tcp"
+  cidr_blocks     = ["0.0.0.0/0"]
+  security_group_id = "${element(list("${aws_security_group.ptfe_external.id}", "${aws_security_group.ptfe.id}"), count.index)}"
+}
+
+resource "aws_security_group_rule" "allow_udp_egress" {
+  count = 2
+  type            = "egress"
+  from_port       = 0
+  to_port         = 65535
+  protocol        = "udp"
+  cidr_blocks     = ["0.0.0.0/0"]
+  security_group_id = "${element(list("${aws_security_group.ptfe_external.id}", "${aws_security_group.ptfe.id}"), count.index)}"
 }
 
 data "aws_subnet" "subnet" {
@@ -175,7 +165,10 @@ resource "aws_launch_configuration" "ptfe" {
   image_id             = "${var.ami_id}"
   instance_type        = "${var.instance_type}"
   key_name             = "${var.key_name}"
-  security_groups      = ["${coalesce(var.internal_security_group_id, join("", aws_security_group.ptfe.*.id))}"]
+  security_groups      = [
+    "${compact(list("${var.internal_security_group_id}","${aws_security_group.ptfe.id}"))}"
+  ]
+
   iam_instance_profile = "${aws_iam_instance_profile.tfe_instance.name}"
 
   root_block_device {
@@ -256,7 +249,7 @@ KMS_KEY_ID="${var.kms_key_id}"
 INSTALL_ID="${var.installation_id}"
 DATA_REDUNDANCY="${var.ebs_redundancy}"
 PROXY_URL="${var.proxy_url}"
-    BASH
+  BASH
 }
 
 resource "local_file" "setup" {
@@ -277,13 +270,16 @@ KMS_KEY_ID="${var.kms_key_id}"
 INSTALL_ID="${var.installation_id}"
 DATA_REDUNDANCY="${var.ebs_redundancy}"
 PROXY_URL="${var.proxy_url}"
-    BASH
+  BASH
 }
 
 resource "aws_elb" "ptfe" {
   internal        = "${var.internal_elb}"
   subnets         = ["${var.elb_subnet_id}"]
-  security_groups = ["${coalesce(var.external_security_group_id, join("", aws_security_group.ptfe-external.*.id))}"]
+  security_groups = [
+    "${aws_security_group.ptfe_external.id}",
+    "${var.external_security_group_id}",
+  ]
 
   listener {
     instance_port      = 8080
@@ -323,4 +319,12 @@ output "zone_id" {
 
 output "hostname" {
   value = "${var.hostname}"
+}
+
+output "external_security_group" {
+  value = "${aws_security_group.ptfe_external.id}"
+}
+
+output "instance_security_group" {
+  value = "${aws_security_group.ptfe.id}"
 }
