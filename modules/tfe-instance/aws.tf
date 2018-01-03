@@ -200,7 +200,7 @@ resource "aws_autoscaling_group" "ptfe" {
   min_size              = 1
   max_size              = 1
   vpc_zone_identifier   = ["${var.instance_subnet_id}"]
-  load_balancers        = ["${aws_elb.ptfe.id}"]
+  load_balancers        = ["${aws_elb.ptfe.id}", "${aws_elb.internal_ptfe.id}"]
   wait_for_elb_capacity = 1
 
   tag {
@@ -306,6 +306,42 @@ resource "aws_elb" "ptfe" {
 
   tags {
     Name = "terraform-enterprise"
+  }
+}
+
+resource "aws_elb" "internal_ptfe" {
+  internal        = true
+  subnets         = ["${var.instance_subnet_id}"]
+  security_groups = [ 
+    "${aws_security_group.ptfe_external.id}",
+    "${var.external_security_group_id}",
+  ]
+
+  listener {
+    instance_port      = 8080
+    instance_protocol  = "http"
+    lb_port            = 443
+    lb_protocol        = "https"
+    ssl_certificate_id = "${var.cert_id}"
+  }
+
+  listener {
+    instance_port     = 8080
+    instance_protocol = "http"
+    lb_port           = 80
+    lb_protocol       = "http"
+  }
+
+  health_check {
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 3
+    target              = "TCP:8080"
+    interval            = 5
+  }
+
+  tags {
+    Name = "terraform-enterprise-internal"
   }
 }
 
