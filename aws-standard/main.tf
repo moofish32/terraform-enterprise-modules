@@ -210,7 +210,6 @@ resource "aws_kms_key" "key" {
       "Effect": "Allow",
       "Principal": {
         "AWS": [
-          "${data.aws_caller_identity.current.arn}",
           "arn:${var.arn_partition}:iam::${data.aws_caller_identity.current.account_id}:root",
           "arn:${var.arn_partition}:iam::${data.aws_caller_identity.current.account_id}:role/tfe_iam_role-${random_id.installation-id.hex}"
         ]
@@ -279,7 +278,7 @@ module "db" {
   password                = "${var.db_password}"
   storage_gbs             = "${var.db_size_gb}"
   subnet_ids              = "${var.data_subnet_ids}"
-  engine_version          = "9.4.7"
+  engine_version          = "9.4.15"
   vpc_cidr                = "${data.aws_vpc.vpc.cidr_block}"
   vpc_id                  = "${data.aws_subnet.instance.vpc_id}"
   backup_retention_period = "31"
