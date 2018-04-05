@@ -80,6 +80,7 @@ variable "internet_access" {
 
 resource "aws_security_group" "ptfe" {
   vpc_id = "${var.vpc_id}"
+
   tags {
     Name = "terraform-enterprise"
   }
@@ -97,48 +98,49 @@ resource "aws_security_group_rule" "allow_elb_ingress" {
 
 resource "aws_security_group" "ptfe_external" {
   vpc_id = "${var.vpc_id}"
+
   tags {
     Name = "terraform-enterprise-external"
   }
 }
 
 resource "aws_security_group_rule" "allow_internet_80" {
-  count = "${var.internet_access ? 1 : 0 }"
-  type            = "ingress"
-  from_port       = 80
-  to_port         = 80
-  protocol        = "tcp"
-  cidr_blocks     = ["0.0.0.0/0"]
+  count             = "${var.internet_access ? 1 : 0 }"
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = "${aws_security_group.ptfe_external.id}"
 }
 
 resource "aws_security_group_rule" "allow_internet_443" {
-  count = "${var.internet_access ? 1 : 0 }"
-  type            = "ingress"
-  from_port       = 443
-  to_port         = 443
-  protocol        = "tcp"
-  cidr_blocks     = ["0.0.0.0/0"]
+  count             = "${var.internet_access ? 1 : 0 }"
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = "${aws_security_group.ptfe_external.id}"
 }
 
 resource "aws_security_group_rule" "allow_tcp_egress" {
-  count = 2
-  type            = "egress"
-  from_port       = 0
-  to_port         = 65535
-  protocol        = "tcp"
-  cidr_blocks     = ["0.0.0.0/0"]
+  count             = 2
+  type              = "egress"
+  from_port         = 0
+  to_port           = 65535
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = "${element(list("${aws_security_group.ptfe_external.id}", "${aws_security_group.ptfe.id}"), count.index)}"
 }
 
 resource "aws_security_group_rule" "allow_udp_egress" {
-  count = 2
-  type            = "egress"
-  from_port       = 0
-  to_port         = 65535
-  protocol        = "udp"
-  cidr_blocks     = ["0.0.0.0/0"]
+  count             = 2
+  type              = "egress"
+  from_port         = 0
+  to_port           = 65535
+  protocol          = "udp"
+  cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = "${element(list("${aws_security_group.ptfe_external.id}", "${aws_security_group.ptfe.id}"), count.index)}"
 }
 
@@ -162,11 +164,12 @@ resource "aws_ebs_volume" "data" {
 }
 
 resource "aws_launch_configuration" "ptfe" {
-  image_id             = "${var.ami_id}"
-  instance_type        = "${var.instance_type}"
-  key_name             = "${var.key_name}"
-  security_groups      = [
-    "${compact(list("${var.internal_security_group_id}","${aws_security_group.ptfe.id}"))}"
+  image_id      = "${var.ami_id}"
+  instance_type = "${var.instance_type}"
+  key_name      = "${var.key_name}"
+
+  security_groups = [
+    "${compact(list("${var.internal_security_group_id}","${aws_security_group.ptfe.id}"))}",
   ]
 
   iam_instance_profile = "${aws_iam_instance_profile.tfe_instance.name}"
@@ -274,8 +277,9 @@ PROXY_URL="${var.proxy_url}"
 }
 
 resource "aws_elb" "ptfe" {
-  internal        = "${var.internal_elb}"
-  subnets         = ["${var.elb_subnet_id}"]
+  internal = "${var.internal_elb}"
+  subnets  = ["${var.elb_subnet_id}"]
+
   security_groups = [
     "${aws_security_group.ptfe_external.id}",
     "${var.external_security_group_id}",
@@ -310,9 +314,10 @@ resource "aws_elb" "ptfe" {
 }
 
 resource "aws_elb" "internal_ptfe" {
-  internal        = true
-  subnets         = ["${var.instance_subnet_id}"]
-  security_groups = [ 
+  internal = true
+  subnets  = ["${var.instance_subnet_id}"]
+
+  security_groups = [
     "${aws_security_group.ptfe_external.id}",
     "${var.external_security_group_id}",
   ]
@@ -343,6 +348,26 @@ resource "aws_elb" "internal_ptfe" {
   tags {
     Name = "terraform-enterprise-internal"
   }
+}
+
+resource "aws_load_balancer_policy" "ptfe_ssl" {
+  load_balancer_name = "${aws_elb.ptfe.name}"
+  policy_name        = "ssl-policy"
+  policy_type_name   = "SSLNegotiationPolicyType"
+
+  policy_attribute {
+    name  = "Reference-Security-Policy"
+    value = "ELBSecurityPolicy-TLS-1-2-2017-01"
+  }
+}
+
+resource "aws_load_balancer_listener_policy" "ptfe" {
+  load_balancer_name = "${aws_elb.ptfe.name}"
+  load_balancer_port = 443
+
+  policy_names = [
+    "${aws_load_balancer_policy.ptfe_ssl.policy_name}",
+  ]
 }
 
 output "dns_name" {
