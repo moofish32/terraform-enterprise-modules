@@ -33,15 +33,15 @@ variable "redis_port" {}
 variable "kms_key_id" {}
 
 variable "archivist_sse" {
-  type = "string"
+  type        = "string"
   description = "Setting for server-side encryption of objects in S3; if provided, must be set to 'aws:kms'"
-  default = ""
+  default     = ""
 }
 
 variable "archivist_kms_key_id" {
-  type = "string"
+  type        = "string"
   description = "KMS key ID used by Archivist to enable S3 server-side encryption"
-  default = ""
+  default     = ""
 }
 
 variable "local_setup" {
@@ -337,6 +337,26 @@ resource "aws_elb" "ptfe" {
   tags {
     Name = "terraform-enterprise"
   }
+}
+
+resource "aws_load_balancer_policy" "ptfe_ssl" {
+  load_balancer_name = "${aws_elb.ptfe.name}"
+  policy_name        = "ssl-policy"
+  policy_type_name   = "SSLNegotiationPolicyType"
+
+  policy_attribute {
+    name  = "Reference-Security-Policy"
+    value = "ELBSecurityPolicy-TLS-1-2-2017-01"
+  }
+}
+
+resource "aws_load_balancer_listener_policy" "ptfe" {
+  load_balancer_name = "${aws_elb.example.name}"
+  load_balancer_port = 443
+
+  policy_names = [
+    "${aws_load_balancer_policy.ptfe_ssl.policy_name}",
+  ]
 }
 
 output "dns_name" {
