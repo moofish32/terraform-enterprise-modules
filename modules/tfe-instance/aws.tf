@@ -370,12 +370,23 @@ resource "aws_load_balancer_listener_policy" "ptfe" {
   ]
 }
 
+resource "aws_load_balancer_policy" "ptfe_ssl_internal" {
+  load_balancer_name = "${aws_elb.ptfe.name}"
+  policy_name        = "ssl-policy"
+  policy_type_name   = "SSLNegotiationPolicyType"
+
+  policy_attribute {
+    name  = "Reference-Security-Policy"
+    value = "ELBSecurityPolicy-TLS-1-2-2017-01"
+  }
+}
+
 resource "aws_load_balancer_listener_policy" "ptfe_internal" {
   load_balancer_name = "${aws_elb.internal_ptfe.name}"
   load_balancer_port = 443
 
   policy_names = [
-    "${aws_load_balancer_policy.ptfe_ssl.policy_name}",
+    "${aws_load_balancer_policy.ptfe_ssl_internal.policy_name}",
   ]
 }
 
