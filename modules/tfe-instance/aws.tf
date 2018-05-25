@@ -371,7 +371,7 @@ resource "aws_load_balancer_listener_policy" "ptfe" {
 }
 
 resource "aws_load_balancer_policy" "ptfe_ssl_internal" {
-  load_balancer_name = "${aws_elb.ptfe.name}"
+  load_balancer_name = "${aws_elb.internal_ptfe.name}"
   policy_name        = "ssl-policy"
   policy_type_name   = "SSLNegotiationPolicyType"
 
