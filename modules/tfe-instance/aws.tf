@@ -370,6 +370,15 @@ resource "aws_load_balancer_listener_policy" "ptfe" {
   ]
 }
 
+resource "aws_load_balancer_listener_policy" "ptfe_internal" {
+  load_balancer_name = "${aws_elb.internal_ptfe.name}"
+  load_balancer_port = 443
+
+  policy_names = [
+    "${aws_load_balancer_policy.ptfe_ssl.policy_name}",
+  ]
+}
+
 output "dns_name" {
   value = "${aws_elb.ptfe.dns_name}"
 }
